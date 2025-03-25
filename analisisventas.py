@@ -1,63 +1,57 @@
 import pandas as pd
-import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score
+import numpy as np
 
-df_ventas = pd.read_excel("proyecto1.xlsx", sheet_name="in")
-df_sucursales = pd.read_excel("Catalogo_sucursal.xlsx", sheet_name="in")
-df = df_ventas.merge(df_sucursales, on="id_sucursal", how="left")
+def cargar_datos(archivo):
+    return pd.read_excel(archivo)
 
-ventas_totales = df["ventas_tot"].sum()
-socios_con_adeudo = df[df["B_adeudo"] == "Con adeudo"]["no_clientes"].sum()
-socios_sin_adeudo = df[df["B_adeudo"] == "Sin adeudo"]["no_clientes"].sum()
-socios_totales = socios_con_adeudo + socios_sin_adeudo
-porc_con_adeudo = (socios_con_adeudo / socios_totales) * 100
-porc_sin_adeudo = (socios_sin_adeudo / socios_totales) * 100
-deuda_total = df["adeudo_actual"].sum()
-porcentaje_utilidad = ((ventas_totales - deuda_total) / ventas_totales) * 100
+def procesar_datos(df):
+    df['SEXO'] = df['SEXO'].map({'MASCULINO': 0, 'FEMENINO': 1})
+    df['DIABETES'] = df['DIABETES'].map({'NO': 0, 'SI': 1})
+    return df
 
-print(f"Conocer las ventas totales del comercio: {ventas_totales}")
-print(f"Conocer cuantos socios tienen adeudo y cuantos no tienen adeudo con su porcentaje correspondiente:")
-print(f"  - Porcentaje de socios con adeudo: {porc_con_adeudo:.2f}%")
-print(f"  - Porcentaje de socios sin adeudo: {porc_sin_adeudo:.2f}%")
-print(f"Cuanto es la deuda total de los clientes: {deuda_total}")
-print(f"Cuanto es el porcentaje de utilidad del comercio a partir de el total de las ventas respecto del adeudo: {porcentaje_utilidad:.2f}%")
+def preparar_conjuntos(df):
+    X = df[['EDAD', 'SEXO', 'IMC', 'HEMOGLOBINA']]
+    y = df['DIABETES']
+    return train_test_split(X, y, test_size=0.3, random_state=42)
 
-df["B_mes"] = pd.to_datetime(df["B_mes"], errors="coerce")
-df_fecha_ventas = df.groupby("B_mes")["ventas_tot"].sum().reset_index()
-plt.figure(figsize=(12,6))
-plt.bar(df_fecha_ventas["B_mes"].dt.strftime('%Y-%m'), df_fecha_ventas["ventas_tot"], color='blue', alpha=0.7, edgecolor='black', width=0.6)
-plt.xticks(rotation=45, ha='right')
-plt.title("Ventas Totales a lo Largo del Tiempo")
-plt.xlabel("Fecha")
-plt.ylabel("Ventas Totales")
-plt.grid(axis='y', linestyle='--', alpha=0.7)
-plt.tight_layout()
-plt.show()
+def entrenar_modelo(X_train, y_train):
+    modelo = RandomForestClassifier(
+        n_estimators=150,
+        max_depth=8,
+        min_samples_split=5,
+        random_state=42
+    )
+    modelo.fit(X_train, y_train)
+    return modelo
 
-df_std = df.groupby("B_mes")["pagos_tot"].std().reset_index()
-plt.figure(figsize=(10,5))
-plt.plot(df_std["B_mes"].dt.strftime('%Y-%m'), df_std["pagos_tot"], marker='o', linestyle='-', color='red')
-plt.xticks(rotation=90)
-plt.title("Desviación Estándar de los Pagos Realizados")
-plt.xlabel("Fecha")
-plt.ylabel("Desviación Estándar de Pagos")
-plt.show()
+def evaluar_modelo(modelo, X_test, y_test):
+    predicciones = modelo.predict(X_test)
+    precision = accuracy_score(y_test, predicciones)
+    print(f"Precisión del modelo: {precision:.2%}")
+    return precision
 
-df_sucursal_ventas = df.groupby("suc")["ventas_tot"].sum()
-plt.figure(figsize=(7,7))
-plt.pie(df_sucursal_ventas, labels=df_sucursal_ventas.index, autopct='%1.1f%%')
-plt.title("Distribución de Ventas por Sucursal")
-plt.show()
+def ejecutar_proceso_completo():
+    datos_entrenamiento = cargar_datos('ENFERMERIA.xlsx')
+    datos_procesados = procesar_datos(datos_entrenamiento)
+    
+    X_train, X_test, y_train, y_test = preparar_conjuntos(datos_procesados)
+    modelo_entrenado = entrenar_modelo(X_train, y_train)
+    
+    resultado = evaluar_modelo(modelo_entrenado, X_test, y_test)
+    return modelo_entrenado, resultado
 
-df_sucursal = df.groupby("suc").agg({"adeudo_actual": "sum", "ventas_tot": "sum"})
-df_sucursal["margen_utilidad"] = (df_sucursal["ventas_tot"] - df_sucursal["adeudo_actual"]) / df_sucursal["ventas_tot"] * 100
-
-fig, ax1 = plt.subplots(figsize=(10,5))
-ax2 = ax1.twinx()
-ax1.bar(df_sucursal.index, df_sucursal["adeudo_actual"], color='r', label='Deuda Total', width=0.6)
-ax2.plot(df_sucursal.index, df_sucursal["margen_utilidad"], color='b', marker='o', linestyle='-', label='Margen de Utilidad (%)')
-ax1.set_xlabel("Sucursal")
-ax1.set_ylabel("Deuda Total", color='r')
-ax2.set_ylabel("Margen de Utilidad (%)", color='b')
-plt.title("Deudas Totales por Sucursal y Margen de Utilidad")
-plt.tight_layout()
-plt.show()
+if __name__ == "__main__":
+    modelo_final, metrica = ejecutar_proceso_completo()
+    
+    datos_nuevos = cargar_datos('NUEVOS_DATOS.xlsx')
+    datos_nuevos_procesados = procesar_datos(datos_nuevos)
+    
+    X_nuevos = datos_nuevos_procesados[['EDAD', 'SEXO', 'IMC', 'HEMOGLOBINA']]
+    predicciones_finales = modelo_final.predict(X_nuevos)
+    
+    resultados_finales = datos_nuevos_procesados.copy()
+    resultados_finales['PREDICCION_DIABETES'] = np.where(predicciones_finales == 1, 'SI', 'NO')
+    resultados_finales.to_excel('PREDICCION_DIABETES.xlsx', index=False)
