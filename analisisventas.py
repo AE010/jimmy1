@@ -7,7 +7,7 @@ import numpy as np
 def cargar_datos(archivo):
     return pd.read_excel(archivo)
 
-def procesar_datos(df):
+def procesar_datos(df): #ggg
     df['SEXO'] = df['SEXO'].map({'MASCULINO': 0, 'FEMENINO': 1})
     df['DIABETES'] = df['DIABETES'].map({'NO': 0, 'SI': 1})
     return df
